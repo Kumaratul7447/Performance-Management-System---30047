@@ -1,0 +1,231 @@
+# frontend.py
+# This file contains the Streamlit-based web interface for the PMS.
+# It interacts with the functions defined in backend.py.
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import backend
+
+# --- Main Application Logic ---
+
+# Initialize the database and create a dummy user for demonstration
+backend.setup_database()
+backend.create_user("Alice", "Manager")
+backend.create_user("Bob", "Employee")
+backend.create_user("Charlie", "Employee")
+
+# Set up the Streamlit page configuration
+st.set_page_config(
+    page_title="Performance Management System",
+    page_icon="📈",
+    layout="wide"
+)
+
+# --- Session State Management ---
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
+
+if 'role' not in st.session_state:
+    st.session_state.role = None
+
+if 'view' not in st.session_state:
+    st.session_state.view = 'Goals'
+
+# --- Sidebar for Navigation and User Selection ---
+with st.sidebar:
+    st.title("PMS Navigation")
+    
+    # Simple user authentication for demonstration
+    user_options = [user[0] for user in backend.get_all_users()]
+    st.session_state.current_user = st.selectbox("Select User", user_options)
+    
+    if st.session_state.current_user:
+        role = [user[1] for user in backend.get_all_users() if user[0] == st.session_state.current_user][0]
+        st.session_state.role = role
+        st.write(f"Logged in as **{st.session_state.current_user}** ({st.session_state.role})")
+    
+    st.subheader("Dashboard Views")
+    views = ["Goals", "Business Insights", "Performance History"]
+    st.session_state.view = st.radio("Go to", views)
+
+# --- Main Content Area ---
+st.title("Performance Management Dashboard")
+st.markdown("A simple tool to manage and track team performance.")
+st.divider()
+
+# --- Goals Section ---
+if st.session_state.view == "Goals":
+    st.header("Goals & Tasks")
+    
+    # Display section based on user role
+    if st.session_state.role == "Manager":
+        st.subheader("Set a New Goal")
+        employee_options = [user[0] for user in backend.get_all_users() if user[1] == 'Employee']
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_employee = st.selectbox("Select Employee", employee_options)
+        with col2:
+            due_date = st.date_input("Due Date", datetime.now())
+        
+        goal_description = st.text_area("Goal Description")
+        
+        if st.button("Create Goal", use_container_width=True):
+            if selected_employee and goal_description:
+                backend.create_goal(selected_employee, st.session_state.current_user, goal_description, due_date)
+                st.success("Goal created successfully!")
+            else:
+                st.error("Please fill in all fields.")
+        
+        st.divider()
+        st.subheader("Your Team's Goals")
+        
+        goals = backend.get_goals(username=st.session_state.current_user, manager=True)
+        if goals:
+            df_goals = pd.DataFrame(goals, columns=["ID", "Employee", "Manager", "Description", "Due Date", "Status", "Created At"])
+            st.dataframe(df_goals, use_container_width=True)
+            
+            goal_to_update = st.selectbox("Select Goal to Manage", df_goals["ID"].unique())
+            if goal_to_update:
+                st.subheader(f"Manage Goal ID: {goal_to_update}")
+                selected_goal = df_goals[df_goals["ID"] == goal_to_update].iloc[0]
+                
+                # Update Goal Status (Manager only)
+                new_status = st.selectbox("Update Goal Status", ["Draft", "In Progress", "Completed", "Cancelled"], index=["Draft", "In Progress", "Completed", "Cancelled"].index(selected_goal['Status']))
+                if st.button("Update Status"):
+                    backend.update_goal_status(goal_to_update, new_status)
+                    st.success("Goal status updated!")
+                    st.experimental_rerun()
+                
+                # Feedback Section (Manager only)
+                st.subheader("Provide Feedback")
+                feedback_text = st.text_area("Write your feedback here", key=f"feedback_{goal_to_update}")
+                if st.button("Submit Feedback"):
+                    if feedback_text:
+                        backend.create_feedback(goal_to_update, st.session_state.current_user, feedback_text)
+                        st.success("Feedback submitted!")
+                        st.experimental_rerun()
+
+                # View Tasks & Approval
+                st.subheader("Tasks & Approval")
+                tasks = backend.get_tasks_for_goal(goal_to_update)
+                if tasks:
+                    df_tasks = pd.DataFrame(tasks, columns=["ID", "Goal ID", "Employee", "Description", "Approved", "Created At"])
+                    st.dataframe(df_tasks, use_container_width=True)
+                    
+                    task_to_approve = st.selectbox("Select Task to Approve/Deny", df_tasks["ID"].unique(), key=f"approve_{goal_to_update}")
+                    if st.button("Approve Task"):
+                        backend.update_task_approval(task_to_approve, True)
+                        st.success("Task approved!")
+                        st.experimental_rerun()
+                    if st.button("Deny Task"):
+                        backend.update_task_approval(task_to_approve, False)
+                        st.success("Task approval removed!")
+                        st.experimental_rerun()
+                else:
+                    st.info("No tasks have been logged for this goal yet.")
+                
+        else:
+            st.info("You have no goals assigned to your team.")
+
+    elif st.session_state.role == "Employee":
+        st.subheader("Your Goals")
+        goals = backend.get_goals(username=st.session_state.current_user)
+        
+        if goals:
+            df_goals = pd.DataFrame(goals, columns=["ID", "Employee", "Manager", "Description", "Due Date", "Status", "Created At"])
+            st.dataframe(df_goals, use_container_width=True)
+            
+            goal_to_log_task = st.selectbox("Select a goal to log tasks for", df_goals["ID"].unique())
+            if goal_to_log_task:
+                st.subheader(f"Log Tasks for Goal ID: {goal_to_log_task}")
+                task_description = st.text_area("Task Description")
+                if st.button("Log Task", use_container_width=True):
+                    if task_description:
+                        backend.create_task(goal_to_log_task, st.session_state.current_user, task_description)
+                        st.success("Task logged for manager's approval!")
+                        st.experimental_rerun()
+                
+                st.subheader("Your Tasks for This Goal")
+                tasks = backend.get_tasks_for_goal(goal_to_log_task)
+                if tasks:
+                    df_tasks = pd.DataFrame(tasks, columns=["ID", "Goal ID", "Employee", "Description", "Approved", "Created At"])
+                    st.dataframe(df_tasks, use_container_width=True)
+                else:
+                    st.info("No tasks logged yet.")
+                
+                st.subheader("Feedback from Manager")
+                feedback = backend.get_feedback_for_goal(goal_to_log_task)
+                if feedback:
+                    df_feedback = pd.DataFrame(feedback, columns=["ID", "Goal ID", "Manager", "Content", "Created At"])
+                    st.dataframe(df_feedback, use_container_width=True)
+                else:
+                    st.info("No feedback yet.")
+
+        else:
+            st.info("You have no goals assigned to you yet.")
+
+# --- Business Insights Section ---
+if st.session_state.view == "Business Insights":
+    st.header("Business Insights & Reports")
+    st.markdown("Key metrics to understand team performance at a glance.")
+    
+    insights = backend.get_business_insights()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Goals", insights.get("total_goals", 0))
+    col2.metric("Completed Goals", insights.get("completed_goals", 0))
+    col3.metric("Total Tasks", insights.get("total_tasks", 0))
+    col4.metric("Unapproved Tasks", insights.get("unapproved_tasks", 0))
+    
+    avg_completion = insights.get("avg_completion_time", None)
+    if avg_completion:
+        st.metric("Avg. Completion Time (Days)", f"{avg_completion:.2f}")
+    else:
+        st.metric("Avg. Completion Time (Days)", "N/A")
+    
+    st.subheader("Goals per Employee")
+    goals_per_employee = insights.get("goals_per_employee", [])
+    if goals_per_employee:
+        df_goals_per_emp = pd.DataFrame(goals_per_employee, columns=["Employee", "Goals Count"])
+        st.bar_chart(df_goals_per_emp.set_index("Employee"))
+    
+    st.subheader("Tasks per Goal")
+    tasks_per_goal = insights.get("tasks_per_goal", [])
+    if tasks_per_goal:
+        df_tasks_per_goal = pd.DataFrame(tasks_per_goal, columns=["Goal ID", "Task Count"])
+        st.dataframe(df_tasks_per_goal, use_container_width=True)
+    
+# --- Performance History Section ---
+if st.session_state.view == "Performance History":
+    st.header("Performance History")
+    st.markdown("A detailed history of past and present goals, tasks, and feedback.")
+    
+    user_options = [user[0] for user in backend.get_all_users()]
+    employee_to_view = st.selectbox("Select an employee to view history", user_options)
+    
+    if employee_to_view:
+        history = backend.get_user_performance_history(employee_to_view)
+        
+        if history:
+            for goal in history:
+                st.subheader(f"Goal ID: {goal['goal_id']} - {goal['goal_description']}")
+                st.markdown(f"**Status:** {goal['status']}")
+                st.markdown(f"**Due Date:** {goal['due_date']}")
+                
+                with st.expander("View Tasks"):
+                    if goal['tasks']:
+                        tasks_df = pd.DataFrame(goal['tasks'])
+                        st.dataframe(tasks_df, use_container_width=True)
+                    else:
+                        st.info("No tasks logged for this goal.")
+                
+                with st.expander("View Feedback"):
+                    if goal['feedback']:
+                        feedback_df = pd.DataFrame(goal['feedback'])
+                        st.dataframe(feedback_df, use_container_width=True)
+                    else:
+                        st.info("No feedback provided for this goal.")
+                st.divider()
+        else:
+            st.info("No performance history found for this employee.")
