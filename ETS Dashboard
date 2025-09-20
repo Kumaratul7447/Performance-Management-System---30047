@@ -615,5 +615,39 @@ def main():
     )
     st.plotly_chart(fig_scatter, use_container_width=True)
 
+    # --- President vs GDP Analysis ---
+    st.subheader("Presidents and U.S. GDP During Their Terms")
+
+    # Example GDP data for each president's term (in billions USD, illustrative)
+    president_gdp = [
+        {"name": "Bill Clinton", "start": 1993, "end": 2000, "gdp": 9000},
+        {"name": "George W. Bush", "start": 2001, "end": 2008, "gdp": 14000},
+        {"name": "Barack Obama", "start": 2009, "end": 2016, "gdp": 18000},
+        {"name": "Donald Trump", "start": 2017, "end": 2020, "gdp": 21000},
+        {"name": "Joe Biden", "start": 2021, "end": 2025, "gdp": 23000}
+    ]
+    president_gdp_df = pd.DataFrame(president_gdp)
+    president_gdp_df['Term'] = president_gdp_df['start'].astype(str) + '-' + president_gdp_df['end'].astype(str)
+
+    fig_pres_gdp = px.bar(
+        president_gdp_df,
+        x='name',
+        y='gdp',
+        text='Term',
+        color='gdp',
+        color_continuous_scale='Blues',
+        title="U.S. GDP by President's Term",
+        labels={'name': 'President', 'gdp': 'GDP (Billion USD)'
+    })
+    fig_pres_gdp.update_traces(texttemplate='%{text}', textposition='outside')
+    fig_pres_gdp.update_layout(
+        xaxis_title="President",
+        yaxis_title="GDP (Billion USD)",
+        plot_bgcolor="#f5f5f5",
+        font=dict(family="Arial", size=14, color="#222"),
+        bargap=0.35
+    )
+    st.plotly_chart(fig_pres_gdp, use_container_width=True)
+
 if __name__ == "__main__":
     main()
