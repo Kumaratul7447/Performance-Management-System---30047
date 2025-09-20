@@ -1,0 +1,36 @@
+-- Users Table: Stores all user information, including a unique username and role.
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    role VARCHAR(50) NOT NULL CHECK (role IN ('Manager', 'Employee'))
+);
+
+-- Goals Table: Manages individual goals, linking them to a manager and an employee.
+CREATE TABLE goals (
+    goal_id SERIAL PRIMARY KEY,
+    employee_username VARCHAR(255) REFERENCES users(username) ON DELETE CASCADE,
+    manager_username VARCHAR(255) REFERENCES users(username) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    due_date DATE NOT NULL,
+    status VARCHAR(50) NOT NULL CHECK (status IN ('Draft', 'In Progress', 'Completed', 'Cancelled')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tasks Table: Tracks specific tasks that contribute to a goal.
+CREATE TABLE tasks (
+    task_id SERIAL PRIMARY KEY,
+    goal_id INTEGER REFERENCES goals(goal_id) ON DELETE CASCADE,
+    employee_username VARCHAR(255) REFERENCES users(username) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    is_approved BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Feedback Table: Stores written feedback from a manager on a specific goal.
+CREATE TABLE feedback (
+    feedback_id SERIAL PRIMARY KEY,
+    goal_id INTEGER REFERENCES goals(goal_id) ON DELETE CASCADE,
+    manager_username VARCHAR(255) REFERENCES users(username) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
